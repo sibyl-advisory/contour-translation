@@ -91,11 +91,52 @@ A well-supported analysis should show no `unsupported` or `error` rows.
 | ⚠️ `render_spec_kind = "error"` rows | A translator threw at runtime; message is in `render_spec_json.error` | Fix the translator; the design is exception-safe so other boards keep working |
 | ⚠️ Build succeeds but output is empty / transform didn't run | Placeholders not all replaced, so the transform isn't registered | Replace every value in the CONFIG block (see "Configuration") |
 
+## From extracted logic to a working app
+
+The output dataset is a structured, machine-readable description of an entire Contour analysis — exactly the kind of input an AI Forward Deployed Engineer (AI-FDE) can turn into a production build. Once the dataset exists, point AI-FDE at it and walk it through the three stages below: rebuild the logic as a pipeline, model the result as an Ontology object, then generate an OSDK app on top.
+
+Replace the bracketed placeholders with your own values before sending.
+
+### 1. Rebuild the analysis logic as a pipeline
+
+```
+I have a dataset `<your_output_dataset>` with one row per Contour board, produced by the
+Contour Translator. Each row has `board_index`, `board_type`, `logic_description`, and a
+normalized `render_spec_json`, plus `input_dataset_names` / `input_ref_names` for lineage.
+
+Read it in `board_index` order and reconstruct the analysis as a Foundry Python transforms
+pipeline: one transform step per transform-category board (filter, expression, aggregate,
+join, pivot-table, column-editor, sort, etc.), wiring inputs from the resolved dataset/ref
+names. Use `render_spec_json` as the source of truth for each step's parameters and fall
+back to `board_state_json` only for board types with no render spec. Skip visualization
+boards (chart/table/histogram/markdown). Produce a final clean output dataset.
+```
+
+### 2. Model the output as an Ontology object
+
+```
+Take the final output dataset from the pipeline above and propose an Ontology object type
+for it: pick a sensible primary key, map each column to a property with the right type,
+suggest a title/description, and flag any columns that should become links to existing
+object types. Then create the object type and back it with that dataset.
+```
+
+### 3. Generate an OSDK app on top
+
+```
+Using the Ontology object type we just created, scaffold an OSDK + React app (Developer
+Console) that lets a user browse, search, and filter the objects. Drive the UI off the
+object's properties, add a detail view per object, and keep the interactive filters that
+the source analysis used (you can read the original filter/histogram selections from the
+`render_spec_json` rows where `render_spec_kind` is `filter` or `histogram`).
+```
+
+> These prompts assume AI-FDE has access to the same Foundry stack and to `<your_output_dataset>`. Tighten the scope (specific refs, specific boards) by adding a `WHERE` clause to the dataset AI-FDE reads.
+
 ## Known limitations / out of scope
 
-1. **Analysis boards only — no dashboard layout.** This template reads the analysis path's boards. The Contour HTTP endpoint that returns dashboard tile grid coordinates / dashboard-only cards is undocumented and not integrated here.
-2. **Unsupported board types** are preserved (raw JSON kept in `board_state_json` / `board_view_state_json`) but not translated until you add a builder.
-3. **One Foundry stack per build**, configured via the single source.
+1. **Unsupported board types** are preserved (raw JSON kept in `board_state_json` / `board_view_state_json`) but not translated until you add a builder.
+2. **One Foundry stack per build**, configured via the single source.
 
 ## Repository layout
 
